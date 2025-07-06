@@ -25,6 +25,43 @@ def conv_str2ActivationFunc(module_str: str) -> nn.Module:
     else:
         raise ValueError(f"Unknown activation function: {module_str}")
 
+from torch import nn
+
+def conv_str2LayerFunc(layer_str: str, **kwargs) -> nn.Module:
+    '''
+    文字列からPyTorchのnn.Module層を生成する。
+
+    Args:
+        layer_str: レイヤー名（例: 'Linear', 'BatchNorm1d', 'Dropout' など）
+        kwargs: 該当レイヤーの引数（例: in_features=128, out_features=64）
+
+    Returns:
+        nn.Module: 対応するPyTorch層のインスタンス
+
+    Raises:
+        ValueError: 未定義のレイヤー名が指定された場合
+    '''
+    layer_map = {
+        'Linear': nn.Linear,
+        'BatchNorm1d': nn.BatchNorm1d,
+        'Dropout': nn.Dropout,
+        'LayerNorm': nn.LayerNorm,
+        'Conv1d': nn.Conv1d,
+        'Conv2d': nn.Conv2d,
+        'MaxPool1d': nn.MaxPool1d,
+        'MaxPool2d': nn.MaxPool2d,
+        'AvgPool1d': nn.AvgPool1d,
+        'AvgPool2d': nn.AvgPool2d,
+    }
+
+    if layer_str not in layer_map:
+        raise ValueError(f"Unknown layer type: {layer_str}")
+
+    layer_class = layer_map[layer_str]
+    return layer_class(**kwargs)
+
+############################## ネットワーク ファクトリ ##############################
+
 def factory_LinearReLU_ModuleList(in_chnls: int, hdn_chnls: int, hdn_layers: int, out_chnls: int ,out_act: str="") -> nn.ModuleList:
     '''
         LinearとReLUが積み重なったネットワークを作成
@@ -37,24 +74,24 @@ def factory_LinearReLU_ModuleList(in_chnls: int, hdn_chnls: int, hdn_layers: int
             out_chnls: 出力層のチャネル数
             out_module: 最終層の指定
     '''
-    lays = nn.ModuleList()
+    layers = nn.ModuleList()
 
     # 入力層
-    lays.append(nn.Linear(in_chnls, hdn_chnls))
-    lays.append(nn.ReLU())
+    layers.append(nn.Linear(in_chnls, hdn_chnls))
+    layers.append(nn.ReLU())
 
 
     # 隠れ層
     for _ in range(hdn_layers):
-        lays.append(nn.Linear(hdn_chnls, hdn_chnls))
-        lays.append(nn.ReLU())
+        layers.append(nn.Linear(hdn_chnls, hdn_chnls))
+        layers.append(nn.ReLU())
 
     # 出力層
-    lays.append(nn.Linear(hdn_chnls, out_chnls))
+    layers.append(nn.Linear(hdn_chnls, out_chnls))
     if out_act != "":
-        lays.append(conv_str2ActivationFunc(out_act))
+        layers.append(conv_str2ActivationFunc(out_act))
 
-    return lays
+    return layers
 
 def factory_LinearReLU_Sequential(in_chnls: int, hdn_chnls: int, hdn_layers: int, out_chnls: int ,out_act: str="") -> nn.Sequential:
     '''
