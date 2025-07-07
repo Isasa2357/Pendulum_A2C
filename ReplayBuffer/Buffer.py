@@ -7,16 +7,19 @@ import random
 import numpy as np
 
 class ReplayBuffer:
-    def __init__(self, capacity: int, state_size: int, action_size: int, device: torch.device):
+    def __init__(self, capacity: int, state_size: int, action_size: int, observation_fmt: list, device: torch.device):
         self._capacity = capacity
         self._device = device
+
+        self._state_size = state_size
+        self._action_size = action_size
         
         self._write_idx = 0
         self._real_size = 0
-        self._status = torch.empty(capacity, state_size, dtype=torch.float32, device=device)
-        self._actions = torch.empty(capacity, action_size, dtype=torch.int32, device=device)
+        self._status = torch.empty(capacity, state_size, dtype=state_type, device=device)
+        self._actions = torch.empty(capacity, action_size, dtype=action_type, device=device)
         self._rewards = torch.empty(capacity, dtype=torch.float32, device=device)
-        self._next_status = torch.empty(capacity, state_size, dtype=torch.float32, device=device)
+        self._next_status = torch.empty(capacity, state_size, dtype=state_type, device=device)
         self._dones = torch.zeros(capacity, dtype=torch.int32, device=device)
 
     def get_batch(self, batch_size: int) -> list:
@@ -34,6 +37,10 @@ class ReplayBuffer:
         extract_rewards = self._rewards[indics]
         extract_next_status = self._next_status[indics]
         extract_dones = self._dones[indics]
+
+        if self._action_size == 1:
+            extract_actions = extract_actions.unsqueeze(0)
+            print(extract_actions)
 
         batch = [extract_status, extract_actions, extract_rewards, extract_next_status, extract_dones]
 

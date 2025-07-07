@@ -30,7 +30,7 @@ def main():
     
     reward_history = list()
     
-    for _ in tqdm(range(1000)):
+    for _ in tqdm(range(500)):
         state, _ = env.reset()
         done = False
         total_reward = 0
@@ -40,8 +40,7 @@ def main():
             next_state, reward, terminated, truncated, _ = env.step(action.detach().numpy()[0])
             done = truncated or terminated
 
-            observation = [state, action, reward, next_state, done]
-            agent.update(*observation)
+            agent.update(state, action, reward, next_state, done)
             total_reward += reward
 
             state = next_state

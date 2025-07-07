@@ -161,7 +161,10 @@ class ActorCriticAgent:
 
         ## バッチの取得
         batch = self._replayBuf.get_batch(self._batch_size)
-        status, rewards, actions, next_status, dones = batch
+        status, actions, reward, next_status, dones = batch
+        print(status)
+        print(actions)
+        print()
 
         ## Criticの更新
         next_action4update = self.get_action_from_meanstd(*self._actor_net.forward(next_status))
