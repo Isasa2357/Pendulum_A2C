@@ -2,6 +2,7 @@
     torch自作便利関数
 '''
 
+from copy import copy, deepcopy
 from typing import List
 
 import torch
@@ -60,6 +61,42 @@ def conv_str2LayerFunc(layer_str: str, **kwargs) -> nn.Module:
     layer_class = layer_map[layer_str]
     return layer_class(**kwargs)
 
+import torch
+from torch import optim
+from torch.nn import Module
+from typing import Type
+
+def conv_str2Optimizer(optimizer_str: str, params, **kwargs) -> optim.Optimizer:
+    '''
+    文字列からPyTorchのOptimizerを生成する
+
+    Args:
+        optimizer_str: オプティマイザの名前（例: 'Adam', 'SGD', 'RMSprop'）
+        params: モデルのパラメータ（model.parameters()）
+        kwargs: オプティマイザに渡す追加の引数（lrなど）
+
+    Returns:
+        PyTorch Optimizer インスタンス
+
+    Raises:
+        ValueError: 未定義のオプティマイザが指定された場合
+    '''
+    optimizer_map = {
+        'SGD': optim.SGD,
+        'Adam': optim.Adam,
+        'AdamW': optim.AdamW,
+        'RMSprop': optim.RMSprop,
+        'Adagrad': optim.Adagrad,
+        'Adadelta': optim.Adadelta,
+    }
+
+    if optimizer_str not in optimizer_map:
+        raise ValueError(f"Unknown optimizer: {optimizer_str}")
+    
+    optimizer_class = optimizer_map[optimizer_str]
+    return optimizer_class(params, **kwargs)
+
+
 ############################## ネットワーク ファクトリ ##############################
 
 def factory_LinearReLU_ModuleList(in_chnls: int, hdn_chnls: int, hdn_layers: int, out_chnls: int ,out_act: str="") -> nn.ModuleList:
@@ -107,3 +144,12 @@ def factory_LinearReLU_Sequential(in_chnls: int, hdn_chnls: int, hdn_layers: int
     '''
     sequential = nn.Sequential(*factory_LinearReLU_ModuleList(in_chnls, hdn_chnls, hdn_layers, out_chnls, out_act))
     return sequential
+
+############################## ネットワーク パラメータ更新 ##############################
+
+def hard_update(source: nn.Module, target: nn.Module):
+    target = deepcopy(source)
+
+def soft_update(source: nn.Module, target: nn.Module, tau: float):
+    for target_param, source_param in zip(target.parameters(), source.parameters()):
+        target_param.data.copy_(tau * source_param.data + (1.0 - tau) * target_param.data)

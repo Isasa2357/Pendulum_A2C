@@ -39,14 +39,14 @@ class ReplayBuffer:
 
         return batch
 
-    def add(self, observation: list):
+    def add(self, state, action, reward, next_state, done):
         '''
         バッファへ要素を追加する
 
         Args:
             observation: バッファへ加える要素
+            ovservation = [state, action, reward, next_state, done]
         '''
-        state, action, reward, next_state, done = observation
 
         self._status[self._write_idx] = torch.tensor(state, device=self._device)
         self._actions[self._write_idx] = torch.tensor(action, device=self._device)

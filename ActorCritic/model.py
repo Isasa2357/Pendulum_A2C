@@ -12,12 +12,12 @@ from ReplayBuffer.Buffer import ReplayBuffer
 
 from usefulParam.ScalarParam import *
 
-from mutil_RL.mutil_torch import factory_LinearReLU_ModuleList
+from mutil_RL.mutil_torch import factory_LinearReLU_ModuleList, factory_LinearReLU_Sequential, conv_str2Optimizer, hard_update, soft_update
 
 
 class ContinuousActorNet(nn.Module):
     def __init__(self, in_chnls, hdn_chnls, hdn_lays, out_chnls):
-
+        super().__init__()
         self._in_chnls = in_chnls
         self._hdn_chnls = hdn_chnls
         self._hdn_lays = hdn_lays
@@ -56,71 +56,39 @@ class CriticNet(nn.Module):
     '''
 
     def __init__(self, 
-                 action_in_chnls: int, action_hdn_chnls: int, action_hdn_layers: int, action_out_chnls: int, 
-                 state_in_chnls: int, state_hdn_chnls: int, state_hdn_layers: int, state_out_chnls: int, 
-                 comm_hdn_chnls: int, comm_hdn_layers: int):
-        # action特徴抽出 変数
-        self._action_in_chnls = action_in_chnls
-        self._action_hdn_chnls = action_hdn_chnls
-        self._action_hdn_layers = action_hdn_layers
-        self._action_out_chnls = action_out_chnls
+                 action_size: int, state_size: int, 
+                 hdn_chnls: int, hdn_layers: int, out_chnls: int):
+        super().__init__()
 
-        # state 特徴抽出 変数
-        self._state_in_chnls = state_in_chnls
-        self._state_hdn_chnls = state_hdn_chnls
-        self._state_hdn_layers = state_hdn_layers
-        self._state_out_chnls = state_out_chnls
+        # 変数定義
+        self._action_size = action_size
+        self._state_size = state_size
+        self._in_chnls = self._action_size + self._state_size
+        self._hdn_chnls = hdn_chnls
+        self._hdn_layers = hdn_layers
+        self._out_chnls = out_chnls
 
-        # actionとstateの統合部分 変数
-        self._comm_in_chnls = action_out_chnls + state_out_chnls
-        self._comm_hdn_chnls = comm_hdn_chnls
-        self._comm_hdn_layers = comm_hdn_layers
-
-        self._action_laysList = factory_LinearReLU_ModuleList(self._action_in_chnls, 
-                                                             self._action_hdn_chnls, 
-                                                             self._action_hdn_layers, 
-                                                             self._action_out_chnls, 
-                                                             "ReLU")
-        self._state_laysList = factory_LinearReLU_ModuleList(self._state_in_chnls, 
-                                                             self._state_hdn_chnls, 
-                                                             self._state_hdn_layers, 
-                                                             self._state_out_chnls,
-                                                             "ReLU")
-        self._comm_laysList = factory_LinearReLU_ModuleList(self._comm_in_chnls, 
-                                                            self._comm_hdn_chnls, 
-                                                            self._comm_hdn_layers, 
-                                                            1, 
-                                                            "ReLU")
-
+        # ネットワーク定義
+        self._network = factory_LinearReLU_Sequential(self._in_chnls, self._hdn_chnls, self._hdn_layers, self._out_chnls)
     
     def forward(self, status: torch.Tensor, actions: torch.Tensor) -> torch.Tensor:
         # 入力調整
         if len(status.shape) == 1:
-            status = status.unsqueeze(0)
+            status = status.unsqueeze(1)
 
         if len(actions.shape) == 1:
-            actions = actions.unsqueeze(0)
-
-        # action
-        for layer in self._action_laysList:
-            actions = layer.forward(actions)
-        
-        # state
-        for layer in self._state_laysList:
-            status = layer.forward(status)
-
+            actions = actions.unsqueeze(1)
         # comm
         x = torch.cat([status, actions], dim=1)
-        for layer in self._comm_laysList:
-            x = layer.forward(x)
+        x = self._network.forward(x)
         
         return x
 
 class ActorCriticAgent:
     def __init__(self, gamma: ScalarParam, lr: ScalarParam, tau: ScalarParam, 
                  state_size: int, action_size: int, # net common param
-                 actor_hdn_chnls: int, actor_hdn_lays: int, actor_potimizer: Callable[..., optim.Optimizer],    # Actor
-                 critic_hdn_chnls: int, critic_hdn_lays: int, critic_optimizer: Callable[..., optim.Optimizer],  # Critic
+                 actor_hdn_chnls: int, actor_hdn_lays: int, actor_potimizer: str,    # Actor
+                 critic_hdn_chnls: int, critic_hdn_lays: int, critic_optimizer: str,  # Critic
                  critic_sync_interval: int, # net_sync
                  buf_capacity: int, batch_size: int, # replayBuf
                  device: torch.device # device
@@ -135,14 +103,12 @@ class ActorCriticAgent:
 
         # Actor net
         self._actor_net = ContinuousActorNet(state_size, actor_hdn_chnls, actor_hdn_lays, action_size)
-        self._actor_optimizer = actor_potimizer(self._actor_net.parameters(), lr=self._lr)
+        self._actor_optimizer = conv_str2Optimizer(critic_optimizer, self._actor_net.parameters(), lr=self._lr)
 
         # Critic net
-        self._critic_net = CriticNet(action_size, 16, 1, 16, 
-                                     state_size, 64, 2, 64, 
-                                     critic_hdn_chnls, critic_hdn_lays)
+        self._critic_net = CriticNet(action_size, state_size, critic_hdn_chnls, critic_hdn_lays, 1)
         self._critic_net_target = deepcopy(self._critic_net)
-        self._critic_optimizer = critic_optimizer(self._critic_net.parameters(), lr=self._lr)
+        self._critic_optimizer = conv_str2Optimizer(critic_optimizer, self._critic_net.parameters(), lr=self._lr)
         self._critic_loss = nn.MSELoss()
         self._interval_count = 0
         self._critic_sync_interval = critic_sync_interval
@@ -151,11 +117,19 @@ class ActorCriticAgent:
         self._replayBuf = ReplayBuffer(buf_capacity, state_size, action_size, device=self._device)
         self._batch_size = batch_size
 
+        # ログ
+        self._actor_loss_history = list()
+        self._critic_loss_history = list()
+
     def get_action(self, status: torch.Tensor) -> torch.Tensor:
         '''
             行動の選択
-            TODO: stateが1つ，複数に限らず実行可能にする
+            
         '''
+        # 入力調整
+        if not type(status) == torch.Tensor:
+            status = torch.tensor(status, device=self._device)
+
         means, stds = self._actor_net.forward(status)
         normal = Normal(means, stds)
         actions = torch.tanh(normal.rsample()) * 2.0
@@ -173,13 +147,13 @@ class ActorCriticAgent:
 
         return actions
     
-    def update(self, observation):
+    def update(self, state, action, reward, next_state, done):
         '''
             リプレイバッファの更新
             ネットワークの更新
         '''
         ### リプレイバッファの更新
-        self._replayBuf.add(observation)
+        self._replayBuf.add(state, action, reward, next_state, done)
         if self._replayBuf.real_size() < self._batch_size:
             return 
 
@@ -191,7 +165,7 @@ class ActorCriticAgent:
 
         ## Criticの更新
         next_action4update = self.get_action_from_meanstd(*self._actor_net.forward(next_status))
-        q_target = rewards * self._gamma * self._critic_net_target(next_status, next_action4update) *(1 - dones)
+        q_target = rewards + self._gamma * self._critic_net_target(next_status, next_action4update) * (1 - dones).unsqueeze(1)
         q_val = self._critic_net(status, actions)
         critic_loss = self._critic_loss(q_val, q_target.detach())
 
@@ -210,12 +184,21 @@ class ActorCriticAgent:
         ## critic_netの同期処理
         self._interval_count, do_sync = self.step_interval_count(self._interval_count)
         if do_sync:
-            self._critic_net_target = deepcopy(self._critic_net)
+            soft_update(self._critic_net, self._critic_net_target, self._tau)
 
         ## 記録
+        self._actor_loss_history.append(actor_loss)
+        self._critic_loss_history.append(critic_loss)
     
     def step_interval_count(self, interval_count: int) -> Tuple[int, bool]:
         interval_count = (interval_count + 1) % self._critic_sync_interval
         do_sync = (interval_count == 0)
         return interval_count, do_sync
-        
+    
+    @property
+    def actor_loss_history(self):
+        return self._actor_loss_history
+    
+    @property
+    def critic_loss_history(self):
+        return self._critic_loss_history
