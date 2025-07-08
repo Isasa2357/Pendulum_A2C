@@ -5,6 +5,7 @@ import torch
 from collections import deque
 import random
 import numpy as np
+from numpy import ndarray
 
 class ReplayBuffer:
     def __init__(self, capacity: int, 
@@ -50,7 +51,7 @@ class ReplayBuffer:
 
         return batch
 
-    def add(self, state, action, reward, next_state, done) -> None:
+    def add(self, state: ndarray, action: ndarray, reward: ndarray, next_state: ndarray, done: ndarray) -> None:
         '''
         バッファへ要素を追加する
 
@@ -74,7 +75,8 @@ class ReplayBuffer:
         '''
         self = ReplayBuffer(self._capacity, 
                             self._state_size, self._action_size, self._reward_size, self._done_size, 
-                            self._status.dtype, self._actions.dtype, self._rewards.dtype, self._dones.dtype, self._device)
+                            self._status.dtype, self._actions.dtype, self._rewards.dtype, self._dones.dtype, 
+                            self._device)
 
     def real_size(self) -> int:
         '''
@@ -191,3 +193,10 @@ class PrioritizedExperienceReplayBuffer:
     
     def __len__(self):
         return self._priorities.real_size()
+
+
+
+
+
+
+

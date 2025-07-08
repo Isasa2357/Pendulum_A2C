@@ -1,3 +1,4 @@
+import os
 from copy import copy, deepcopy
 import numpy as np
 from numpy import ndarray
@@ -89,7 +90,7 @@ class CriticNet(nn.Module):
 class ActorCriticAgent:
     def __init__(self, gamma: ScalarParam, lr: ScalarParam, tau: ScalarParam, 
                  state_size: int, action_size: int, # net common param
-                 actor_hdn_chnls: int, actor_hdn_lays: int, actor_potimizer: str,    # Actor
+                 actor_hdn_chnls: int, actor_hdn_lays: int,     # Actor
                  critic_hdn_chnls: int, critic_hdn_lays: int, critic_optimizer: str,  # Critic
                  critic_sync_interval: int, # net_sync
                  buf_capacity: int, batch_size: int, # replayBuf
@@ -215,8 +216,8 @@ class ActorCriticAgent:
             soft_update(self._critic_net, self._critic_net_target, self._tau.value)
         
         ## 記録
-        self.logging_actor_loss(actor_loss)
-        self.logging_critic_loss(critic_loss)
+        self.logging_actor_loss(actor_loss.item())
+        self.logging_critic_loss(critic_loss.item())
     
     def do_update_network(self) -> bool:
         '''
@@ -230,11 +231,14 @@ class ActorCriticAgent:
         do_sync = (interval_count == 0)
         return interval_count, do_sync
     
-    def logging_actor_loss(self, actor_loss) -> None:
+    def logging_actor_loss(self, actor_loss: float) -> None:
         self.actor_loss_history.append(actor_loss)
     
-    def logging_critic_loss(self, critic_loss) -> None:
+    def logging_critic_loss(self, critic_loss: float) -> None:
         self._critic_loss_history.append(critic_loss)
+    
+    def save_actor(self, name: str, path):
+        torch.save(self._actor_net, os.path.join(path, name))
 
     @property
     def actor_loss_history(self):
