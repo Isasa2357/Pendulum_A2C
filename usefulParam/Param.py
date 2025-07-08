@@ -54,13 +54,28 @@ class ScalarParam:
         self._val = torch.tensor(start, dtype=torch.float32, device=self._device)
         self._scheduler = scheduler
     
-    def step(self):
+    def step(self) -> None:
         self._val = self._scheduler.forward(self._val)
     
     @property
-    def value(self):
+    def tensor_value(self) -> torch.Tensor:
         return self._val
+    
+    @property
+    def value(self) -> float:
+        return self._val.item()
     
     def to(self, device: torch.device):
         self._scheduler.to(device)
         self._val.to(device)
+    
+########## factory ##########
+def makeConstant(val: float, device: torch.device=torch.device("cpu")) -> ScalarParam:
+    scheduler = ConstantScheduler(val, val, device)
+    param = ScalarParam(val,  scheduler, device)
+    return param 
+
+def makeMultiply(val: float, multiply: float, min: float, max: float, device: torch.device=torch.device("cpu")):
+    scheduler = MultiplyScheduler(multiply, min, max, device)
+    param = ScalarParam(val, scheduler, device)
+    return param

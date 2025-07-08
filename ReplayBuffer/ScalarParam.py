@@ -43,5 +43,5 @@ class ScalarParam:
     def step(self):
         self.val_ = self.scheduler_.forward(self.val_)
     
-    def value(self):
+    def value(self) -> float:
         return self.val_

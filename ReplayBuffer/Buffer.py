@@ -7,22 +7,30 @@ import random
 import numpy as np
 
 class ReplayBuffer:
-    def __init__(self, capacity: int, state_size: int, action_size: int, observation_fmt: list, device: torch.device):
+    def __init__(self, capacity: int, 
+                 state_size: int, action_size: int, reward_size: int=1, done_size: int=1, 
+                 state_type: torch.dtype=torch.float32, action_type: torch.dtype=torch.float32, reward_type: torch.dtype=torch.float32, done_type: torch.dtype=torch.int8, 
+                 device: torch.device=torch.device("cpu")):
         self._capacity = capacity
         self._device = device
 
+        # サイズ
         self._state_size = state_size
         self._action_size = action_size
+        self._reward_size = reward_size
+        self._done_size = done_size
         
-        self._write_idx = 0
-        self._real_size = 0
-        self._status = torch.empty(capacity, state_size, dtype=state_type, device=device)
-        self._actions = torch.empty(capacity, action_size, dtype=action_type, device=device)
-        self._rewards = torch.empty(capacity, dtype=torch.float32, device=device)
-        self._next_status = torch.empty(capacity, state_size, dtype=state_type, device=device)
-        self._dones = torch.zeros(capacity, dtype=torch.int32, device=device)
+        self._write_idx = 0     # バッファへの書き込み位置
+        self._real_size = 0     # バッファへ格納された量．バッファが最大までたまると，capacityと等しくなる
 
-    def get_batch(self, batch_size: int) -> list:
+        # バッファ
+        self._status = torch.empty(capacity, self._state_size, dtype=state_type, device=self._device)
+        self._actions = torch.empty(capacity, self._action_size, dtype=action_type, device=self._device)
+        self._rewards = torch.empty(capacity, self._reward_size, dtype=reward_type, device=self._device)
+        self._next_status = torch.empty(capacity, self._state_size, dtype=state_type, device=self._device)
+        self._dones = torch.zeros(capacity, self._done_size, dtype=done_type, device=self._device)
+
+    def get_batch(self, batch_size: int) -> list[torch.Tensor]:
         '''
         バッチの取り出し
         Args:
@@ -38,15 +46,11 @@ class ReplayBuffer:
         extract_next_status = self._next_status[indics]
         extract_dones = self._dones[indics]
 
-        if self._action_size == 1:
-            extract_actions = extract_actions.unsqueeze(0)
-            print(extract_actions)
-
         batch = [extract_status, extract_actions, extract_rewards, extract_next_status, extract_dones]
 
         return batch
 
-    def add(self, state, action, reward, next_state, done):
+    def add(self, state, action, reward, next_state, done) -> None:
         '''
         バッファへ要素を追加する
 
@@ -55,11 +59,11 @@ class ReplayBuffer:
             ovservation = [state, action, reward, next_state, done]
         '''
 
-        self._status[self._write_idx] = torch.tensor(state, device=self._device)
-        self._actions[self._write_idx] = torch.tensor(action, device=self._device)
-        self._rewards[self._write_idx] = torch.tensor(reward, device=self._device)
-        self._next_status[self._write_idx] = torch.tensor(next_state, device=self._device)
-        self._dones[self._write_idx] = torch.tensor(done, device=self._device)
+        self._status[self._write_idx] = torch.tensor(state, dtype=self._status.dtype, device=self._device)
+        self._actions[self._write_idx] = torch.tensor(action, dtype=self._actions.dtype, device=self._device)
+        self._rewards[self._write_idx] = torch.tensor(reward, dtype=self._rewards.dtype, device=self._device)
+        self._next_status[self._write_idx] = torch.tensor(next_state, dtype=self._next_status.dtype, device=self._device)
+        self._dones[self._write_idx] = torch.tensor(done, dtype=self._dones.dtype, device=self._device)
         
         self._write_idx = (self._write_idx + 1) % self._capacity
         self._real_size = min(self._real_size + 1, self._capacity)
@@ -68,7 +72,9 @@ class ReplayBuffer:
         '''
         バッファの内容を全て初期化
         '''
-        pass
+        self = ReplayBuffer(self._capacity, 
+                            self._state_size, self._action_size, self._reward_size, self._done_size, 
+                            self._status.dtype, self._actions.dtype, self._rewards.dtype, self._dones.dtype, self._device)
 
     def real_size(self) -> int:
         '''
@@ -80,10 +86,26 @@ class ReplayBuffer:
         '''
         バッファに格納可能な限界数
         '''
-        return self._status.maxlen()
+        return len(self._status)
     
     def __len__(self):
-        return self.real_size()
+        return self._real_size
+    
+    def to(self, device: torch.device):
+        '''
+            デバイスの変更
+        '''
+        self._status.to(device)
+        self._actions.to(device)
+        self._rewards.to(device)
+        self._next_status.to(device)
+        self._dones.to(device)
+    
+    def adjust_squeeze(self, data: torch.Tensor):
+        if len(data.shape) == 0:
+            data = data.unsqueeze(0)
+        return data
+
 
 class PrioritizedExperienceReplayBuffer:
     def __init__(self, capacity: int, state_size: list, action_size: list, alpha: ScalarParam, beta: ScalarParam, device: str):
@@ -124,7 +146,7 @@ class PrioritizedExperienceReplayBuffer:
         return [weight / max_weight for weight in weights]
 
     # 優先度
-    def calc_priorites(self, loss) -> torch.tensor:
+    def calc_priorites(self, loss) -> torch.Tensor:
         priorities = [((l + 1e-6)**self._alpha.value()).tolist() for l in loss]
         return priorities
     

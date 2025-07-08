@@ -1,4 +1,6 @@
 from copy import copy, deepcopy
+import numpy as np
+from numpy import ndarray
 
 import torch
 from torch import nn
@@ -10,7 +12,7 @@ from typing import List, Tuple, Type, Callable
 
 from ReplayBuffer.Buffer import ReplayBuffer
 
-from usefulParam.ScalarParam import *
+from usefulParam.Param import *
 
 from mutil_RL.mutil_torch import factory_LinearReLU_ModuleList, factory_LinearReLU_Sequential, conv_str2Optimizer, hard_update, soft_update
 
@@ -103,12 +105,12 @@ class ActorCriticAgent:
 
         # Actor net
         self._actor_net = ContinuousActorNet(state_size, actor_hdn_chnls, actor_hdn_lays, action_size)
-        self._actor_optimizer = conv_str2Optimizer(critic_optimizer, self._actor_net.parameters(), lr=self._lr)
+        self._actor_optimizer = conv_str2Optimizer(critic_optimizer, self._actor_net.parameters(), lr=self._lr.value)
 
         # Critic net
         self._critic_net = CriticNet(action_size, state_size, critic_hdn_chnls, critic_hdn_lays, 1)
         self._critic_net_target = deepcopy(self._critic_net)
-        self._critic_optimizer = conv_str2Optimizer(critic_optimizer, self._critic_net.parameters(), lr=self._lr)
+        self._critic_optimizer = conv_str2Optimizer(critic_optimizer, self._critic_net.parameters(), lr=self._lr.value)
         self._critic_loss = nn.MSELoss()
         self._interval_count = 0
         self._critic_sync_interval = critic_sync_interval
@@ -121,7 +123,7 @@ class ActorCriticAgent:
         self._actor_loss_history = list()
         self._critic_loss_history = list()
 
-    def get_action(self, status: torch.Tensor) -> torch.Tensor:
+    def _get_action_comm(self, status: torch.Tensor) -> torch.Tensor:
         '''
             行動の選択
             
@@ -133,9 +135,20 @@ class ActorCriticAgent:
         means, stds = self._actor_net.forward(status)
         normal = Normal(means, stds)
         actions = torch.tanh(normal.rsample()) * 2.0
-        return actions
+        return actions.squeeze(0)
+        
     
-    def get_action_from_meanstd(self, mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
+    def get_action_np(self, status: torch.Tensor) -> np.ndarray:
+        '''
+            行動の選択を行い，np.ndarrayで返却する
+        '''
+        actions = self._get_action_comm(status)
+        return actions.detach().numpy()
+
+    def get_action_torch(self, status: torch.Tensor) -> torch.Tensor:
+        return self._get_action_comm(status)
+    
+    def get_action_from_meanstd_torch(self, mean: torch.Tensor, std: torch.Tensor) -> torch.Tensor:
         if len(mean.shape) == 1:
             mean = mean.unsqueeze(0)
         
@@ -147,28 +160,40 @@ class ActorCriticAgent:
 
         return actions
     
-    def update(self, state, action, reward, next_state, done):
+    def get_action_from_meanstd_np(self, mean: torch.Tensor, std: torch.Tensor) -> np.ndarray:
+        return self.get_action_from_meanstd_torch(mean, std).detach().numpy()
+    
+    def update(self, state: ndarray, action: ndarray, reward: ndarray, next_state: ndarray, done: ndarray):
         '''
             リプレイバッファの更新
             ネットワークの更新
         '''
         ### リプレイバッファの更新
-        self._replayBuf.add(state, action, reward, next_state, done)
-        if self._replayBuf.real_size() < self._batch_size:
-            return 
+        self.update_repbuf(state, action, reward, next_state, done)
 
         ### ネットワークの更新
+        if not self.do_update_network():
+            return 
 
+        self.update_network()
+    
+    def update_repbuf(self, state, action, reward, next_state, done):
+        '''
+        リプレイバッファの更新
+        '''
+        self._replayBuf.add(state, action, reward, next_state, done)
+    
+    def update_network(self):
+        '''
+        ネットワークの更新
+        '''
         ## バッチの取得
         batch = self._replayBuf.get_batch(self._batch_size)
-        status, actions, reward, next_status, dones = batch
-        print(status)
-        print(actions)
-        print()
+        status, actions, rewards, next_status, dones = batch
 
         ## Criticの更新
-        next_action4update = self.get_action_from_meanstd(*self._actor_net.forward(next_status))
-        q_target = rewards + self._gamma * self._critic_net_target(next_status, next_action4update) * (1 - dones).unsqueeze(1)
+        next_action4update = self.get_action_from_meanstd_torch(*self._actor_net.forward(next_status))
+        q_target = rewards + self._gamma.value * self._critic_net_target(next_status, next_action4update) * (1 - dones)
         q_val = self._critic_net(status, actions)
         critic_loss = self._critic_loss(q_val, q_target.detach())
 
@@ -177,7 +202,7 @@ class ActorCriticAgent:
         self._critic_optimizer.step()
 
         ## Actorの更新
-        action4update = self.get_action_from_meanstd(*self._actor_net.forward(status))
+        action4update = self.get_action_from_meanstd_torch(*self._actor_net.forward(status))
         actor_loss = -self._critic_net.forward(status, action4update).mean()
 
         self._actor_optimizer.zero_grad()
@@ -187,17 +212,30 @@ class ActorCriticAgent:
         ## critic_netの同期処理
         self._interval_count, do_sync = self.step_interval_count(self._interval_count)
         if do_sync:
-            soft_update(self._critic_net, self._critic_net_target, self._tau)
-
+            soft_update(self._critic_net, self._critic_net_target, self._tau.value)
+        
         ## 記録
-        self._actor_loss_history.append(actor_loss)
-        self._critic_loss_history.append(critic_loss)
+        self.logging_actor_loss(actor_loss)
+        self.logging_critic_loss(critic_loss)
+    
+    def do_update_network(self) -> bool:
+        '''
+        ネットワークの更新を行うか
+        '''
+        return self._replayBuf.real_size() >= self._batch_size
+
     
     def step_interval_count(self, interval_count: int) -> Tuple[int, bool]:
         interval_count = (interval_count + 1) % self._critic_sync_interval
         do_sync = (interval_count == 0)
         return interval_count, do_sync
     
+    def logging_actor_loss(self, actor_loss) -> None:
+        self.actor_loss_history.append(actor_loss)
+    
+    def logging_critic_loss(self, critic_loss) -> None:
+        self._critic_loss_history.append(critic_loss)
+
     @property
     def actor_loss_history(self):
         return self._actor_loss_history

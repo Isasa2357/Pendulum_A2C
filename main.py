@@ -14,12 +14,16 @@ from torch import nn
 # Actor Critic
 from ActorCritic.model import ActorCriticAgent
 
+# usefulParam
+from usefulParam import Param
+from usefulParam.Param import ScalarParam
+
 
 
 
 def main():
     # モデル作成
-    agent = ActorCriticAgent(0.95, 0.001, 0.1, 
+    agent = ActorCriticAgent(Param.makeConstant(0.95), Param.makeConstant(0.005), Param.makeConstant(0.1), 
                              3, 1, 
                              64, 1, "Adam", 
                              64, 3, "Adam", 200, 
@@ -33,15 +37,17 @@ def main():
     for _ in tqdm(range(500)):
         state, _ = env.reset()
         done = False
-        total_reward = 0
+        total_reward = 0.0
         while not done:
-            action = agent.get_action(state)
+            action = agent.get_action_np(state)
+            # print(action)
+            # print(action.shape)
 
-            next_state, reward, terminated, truncated, _ = env.step(action.detach().numpy()[0])
+            next_state, reward, terminated, truncated, _ = env.step(action)
             done = truncated or terminated
 
             agent.update(state, action, reward, next_state, done)
-            total_reward += reward
+            total_reward += reward.__float__()
 
             state = next_state
         reward_history.append(total_reward)
