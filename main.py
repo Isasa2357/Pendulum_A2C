@@ -74,7 +74,7 @@ def make_result(args: Dict[str, Any], reward_history: list, model: ActorCriticAg
     '''
     project = args['project']
     result = args['result']
-    result_path = os.path.join(project, result)
+    result_path = os.path.join('project', project, result)
 
     # 実行コマンドの作成
     py_cmd = make_exec_cmd(args, f'python {sys.argv[0]}')
