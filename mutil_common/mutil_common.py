@@ -48,9 +48,9 @@ def resolve_conflict_filename(fname: str, path: str) -> str:
 
     id = 0
     while True:
-        candidate_fpath = fpath + str(id)
+        candidate_fpath = fpath + '_' + str(id)
         if not os.path.exists(candidate_fpath):
-            return fname + str(id)
+            return fname + '_' + str(id) 
         id += 1
 
 ##### list計算 #####

@@ -1,0 +1,19 @@
+{
+    "gamma": 0.95,
+    "lr": 0.005,
+    "tau": 0.1,
+    "Actor_hdn_chnl": 64,
+    "Actor_hdn_lays": 1,
+    "Critic_hdn_chnls": 64,
+    "Critic_hdn_lays": 3,
+    "Critic_optimizer": "Adam",
+    "Critic_sync_interval": 200,
+    "buf_capacity": 20000,
+    "batch_size": 32,
+    "episodes": 5000,
+    "project": "episode5000",
+    "result": "result",
+    "device": "cuda",
+    "py_cmd": "python main.py gamma 0.95 lr 0.005 tau 0.1 Actor_hdn_chnl 64 Actor_hdn_lays 1 Critic_hdn_chnls 64 Critic_hdn_lays 3 Critic_optimizer Adam Critic_sync_interval 200 buf_capacity 20000 batch_size 32 episodes 5000 project episode5000 result result device cuda",
+    "uv_cmd": "uv run main.py gamma 0.95 lr 0.005 tau 0.1 Actor_hdn_chnl 64 Actor_hdn_lays 1 Critic_hdn_chnls 64 Critic_hdn_lays 3 Critic_optimizer Adam Critic_sync_interval 200 buf_capacity 20000 batch_size 32 episodes 5000 project episode5000 result result device cuda"
+}

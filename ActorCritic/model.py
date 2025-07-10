@@ -105,12 +105,12 @@ class ActorCriticAgent:
         self._tau = tau
 
         # Actor net
-        self._actor_net = ContinuousActorNet(state_size, actor_hdn_chnls, actor_hdn_lays, action_size)
+        self._actor_net = ContinuousActorNet(state_size, actor_hdn_chnls, actor_hdn_lays, action_size).to(device)
         self._actor_optimizer = conv_str2Optimizer(critic_optimizer, self._actor_net.parameters(), lr=self._lr.value)
 
         # Critic net
-        self._critic_net = CriticNet(action_size, state_size, critic_hdn_chnls, critic_hdn_lays, 1)
-        self._critic_net_target = deepcopy(self._critic_net)
+        self._critic_net = CriticNet(action_size, state_size, critic_hdn_chnls, critic_hdn_lays, 1).to(device)
+        self._critic_net_target = deepcopy(self._critic_net).to(device)
         self._critic_optimizer = conv_str2Optimizer(critic_optimizer, self._critic_net.parameters(), lr=self._lr.value)
         self._critic_loss = nn.MSELoss()
         self._interval_count = 0
@@ -144,6 +144,8 @@ class ActorCriticAgent:
             行動の選択を行い，np.ndarrayで返却する
         '''
         actions = self._get_action_comm(status)
+        if actions.device != torch.device('cpu'):
+            actions = actions.to('cpu')
         return actions.detach().numpy()
 
     def get_action_torch(self, status: torch.Tensor) -> torch.Tensor:

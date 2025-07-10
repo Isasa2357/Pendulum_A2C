@@ -40,16 +40,20 @@ def parse_args(args: Dict[str, Any]) -> Dict[str, Any]:
         args[key] = val
     
     # フォルダ名の調整
-    args['result'] = resolve_conflict_filename(args['result'], args['project'])
+    args['result'] = resolve_conflict_filename(args['result'], os.path.join('project', args['project']))
     
     return args
 
 def make_project_folder(project: str, result: str) -> None:
     # プロジェクトフォルダの作成
-    os.makedirs(project, exist_ok=True)
+    project_path = os.path.join('project', project)
+    os.makedirs(project_path, exist_ok=True)
 
     # リザルトフォルダの作成
-    os.mkdir(os.path.join(project, result))
+    result_path = os.path.join(project_path, result)
+    os.mkdir(result_path)
+
+    print(f'make result folder : {result_path}')
 
 def make_exec_cmd(args: Dict[str, Any], initial: str):
     '''
@@ -85,9 +89,13 @@ def make_result(args: Dict[str, Any], reward_history: list, model: ActorCriticAg
 
     ### 条件の記録
     with open(os.path.join(result_path, 'condtion.json'), 'w') as cj:
-        json.dump(args, cj)
+        json.dump(args, cj, indent=4)
 
     ### 報酬の推移の記録
+    with open(os.path.join(result_path, 'reward_history.txt'), 'w') as f:
+        for reward in reward_history:
+            f.write(str(reward))
+            f.write('\n')
     reward_history_ma = get_moveaverage(reward_history, 100)
     plt.plot(reward_history, label='reward_history')
     plt.plot(reward_history_ma, label='ma')
@@ -99,6 +107,9 @@ def make_result(args: Dict[str, Any], reward_history: list, model: ActorCriticAg
     ### Actorのロスの記録
     actor_loss_history = model.actor_loss_history
     actor_loss_history_ma = get_moveaverage(actor_loss_history, 100)
+    with open(os.path.join(result_path, 'actor_history.txt'), 'w') as f:
+        for actor_loss in actor_loss_history:
+            f.write(str(actor_loss) + '\n')
     plt.plot(actor_loss_history, label='actor_loss_history')
     plt.plot(actor_loss_history_ma, label='ma')
     plt.xlabel('step')
@@ -109,6 +120,9 @@ def make_result(args: Dict[str, Any], reward_history: list, model: ActorCriticAg
     ### Criticのロスの記録
     critic_loss_history = model.critic_loss_history
     critic_loss_history_ma = get_moveaverage(critic_loss_history, 100)
+    with open(os.path.join(result_path, 'critic_loss_history.txt'), 'w') as f:
+        for critic_loss in critic_loss_history:
+            f.write(str(critic_loss) + '\n')
     plt.plot(critic_loss_history, label='critic_loss_history')
     plt.plot(critic_loss_history_ma, label='ma')
     plt.xlabel('step')
@@ -170,6 +184,7 @@ def main():
         done = False
         total_reward = 0.0
         while not done:
+            state = torch.tensor(state, dtype=torch.float32, device=torch.device(args['device']))
             action = agent.get_action_np(state)
             # print(action)
             # print(action.shape)
